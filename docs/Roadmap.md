@@ -76,8 +76,9 @@ This document outlines the planned development milestones for Nyx Agent, from fo
 ### **Milestone 4: The Intelligent Agent - The Full Loop**
 *Goal: Combine all modules to enable complex, AI-driven tasks and smart macros.*
 
--   **Sub-milestone 4.1: The Tooling Protocol (MCP)**
-    -   [ ] Design the standard JSON structure for MCP tool definitions and calls.
+-   **Sub-milestone 4.1: The Tooling Protocol (RPC & MCP)**
+    -   [ ] Design a robust JSON-RPC layer for communication between the agent core and its tools.
+    -   [ ] Design the standard JSON structure for MCP tool definitions and calls, to be sent over the RPC layer.
     -   [ ] Implement the first built-in tools (`file.search`, `file.read`, `file.write`) as Rust functions exposed via the MCP protocol.
     -   [ ] Refactor the Cognition Module to generate *plans* that are sequences of MCP tool calls.
 
@@ -92,29 +93,51 @@ This document outlines the planned development milestones for Nyx Agent, from fo
 
 ---
 
-### **Milestone 5: Optimization & Refinement**
+### **Milestone 5: Headless & CLI Operation**
+*Goal: Enable scripting, remote access, and headless operation through a powerful CLI and tunneling service.*
+
+-   **Sub-milestone 5.1: CLI Framework**
+    -   [ ] Implement a CLI framework using a crate like `clap` for parsing commands and arguments.
+    -   [ ] Define initial commands: `nyx status`, `nyx version`, `nyx tunnel`.
+
+-   **Sub-milestone 5.2: Singleton Service**
+    -   [ ] Implement singleton logic to ensure only one instance of the Nyx agent core service is running.
+    -   [ ] The CLI will communicate with the singleton service via an async pipe (Unix socket/named pipe) using JSON-RPC.
+
+-   **Sub-milestone 5.3: Tunneling Service**
+    -   [ ] Integrate a development tunnel service to expose the agent's RPC endpoint securely.
+    -   [ ] Implement `nyx tunnel create` and `nyx tunnel list` commands.
+    -   [ ] Enable local port forwarding through the tunnel.
+
+---
+
+### **Milestone 6: Optimization & Refinement**
 *Goal: Make the agent faster, more accurate, and more user-friendly.*
 
--   **Sub-milestone 5.1: Perception Optimization**
+-   **Sub-milestone 6.1: Perception Optimization**
     -   [ ] Implement the Differential Frame Analyzer to reduce redundant screen analysis.
     -   [ ] Train and integrate a lightweight YOLO model to detect UI elements, providing the LLM with a structured `UI Map` instead of just raw text. This is a major accuracy improvement.
     -   **Tools:** `PyTorch` or `ONNX` runtime for Rust.
 
--   **Sub-milestone 5.2: UI/UX Polish**
+-   **Sub-milestone 6.2: UI/UX Polish**
     -   [ ] Build the Svelte UI for managing the Tool Library (viewing, deleting, or re-generating tools).
     -   [ ] Implement the minimalist overlay UI that shows the current action during execution.
     -   [ ] Create a settings panel for configuring the hotkey, API keys, etc.
 
+-   **Sub-milestone 6.3: Self-Update Mechanism**
+    -   [ ] Implement a self-update mechanism to allow the agent to fetch and apply new versions of itself.
+    -   [ ] Add a `nyx update` command to the CLI.
+
 ---
 
-### **Milestone 6: The Learning System - Self-Improvement (Long-Term)**
+### **Milestone 7: The Learning System - Self-Improvement (Long-Term)**
 *Goal: Enable Nyx to learn from its interactions and improve over time.*
 
--   **Sub-milestone 6.1: Feedback & Data Collection**
+-   **Sub-milestone 7.1: Feedback & Data Collection**
     -   [ ] Implement the logging of task trajectories to the Knowledge Base.
     -   [ ] Add a simple "thumbs up/down" feedback mechanism in the UI after a task completes.
     -   [ ] Implement implicit feedback detection (e.g., detecting if a user manually reverses an action Nyx just took).
 
--   **Sub-milestone 6.2: Reinforcement Learning Pipeline**
+-   **Sub-milestone 7.2: Reinforcement Learning Pipeline**
     -   [ ] (Research) Develop a process for converting the collected trajectory data into a format suitable for fine-tuning.
     -   [ ] (Future) Set up a background service that periodically uses this data to fine-tune a base language model (likely requiring a dedicated service, not done on-device), improving its ability to generate successful plans.
