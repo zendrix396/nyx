@@ -1,5 +1,7 @@
 ### Summary
 
+**⚠️ PRIORITY: This issue should be implemented before other Milestone 1 issues (#3, #4, #10) as they depend on the Orchestrator's state management functionality.**
+
 This issue covers the implementation of the Orchestrator, the central component that manages the agent's state machine and cognitive loop. The Orchestrator coordinates all modules (Perception, Cognition, Tooling, Knowledge) and manages the lifecycle of tasks from user input to completion.
 
 ### Breakdown of Tasks
