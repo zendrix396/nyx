@@ -34,9 +34,19 @@ This issue focuses on establishing the core behavior of Nyx as a background-firs
 
 -   **[ ] Implement a Basic Command Bridge (for testing):**
 
-    -   Create a simple Tauri command `greet(name: &str) -> String` in Rust.
+    -   Create a simple Tauri command `greet(name: &str) -> String` in Rust that takes a `name: String` as an argument and returns a `String` like `"Hello, [name]! You've been greeted from Rust!"`.
 
-    -   On the Svelte frontend (`+page.svelte`), create a basic button that invokes this command to confirm that the webview and backend are communicating correctly when the window is shown.
+    -   Register this command in the `.invoke_handler()` in the `tauri::Builder`.
+
+    -   On the Svelte frontend (`src/src/App.svelte`), create a simple UI with:
+        -   An `<input type="text">` field.
+        -   A `<button>`.
+        -   A `<p>` tag to display the response from Rust.
+    -   Import the `invoke` function from `@tauri-apps/api/tauri`.
+
+    -   When the button is clicked, call the `invoke` function with the command name (`greet`) and the value from the input field, then update the `<p>` tag with the response.
+
+    -   This confirms that the webview and backend are communicating correctly when the window is shown.
 
 -   **[ ] Prevent Accidental Exit:**
 

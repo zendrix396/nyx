@@ -19,6 +19,12 @@ This document outlines the planned development milestones for Nyx Agent, from fo
     -   [ ] Establish the basic Tauri command bridge between the Svelte frontend and the Rust backend.
     -   **Tools:** `tauri`, `svelte`, Rust crates: `global-hotkey`.
 
+-   **Sub-milestone 0.3: System Tray Integration**
+    -   [ ] Add system tray icon with context menu (Show/Hide Agent, Settings, Quit).
+    -   [ ] Implement tray menu event handling.
+    -   [ ] Ensure proper icon bundling in the application build.
+    -   **Tools:** `tauri` tray-icon feature.
+
 ---
 
 ### **Milestone 1: The Hands - Low-Level Control & Manual Macros**
