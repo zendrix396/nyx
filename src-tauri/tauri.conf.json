@@ -12,15 +12,25 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Nyx",
         "width": 800,
         "height": 600,
+        "decorations": false,
+        "transparent": true,
         "resizable": true,
+        "skipTaskbar": true,
+        "visible": false,
         "fullscreen": false
       }
     ],
     "security": {
       "csp": null
+    }
+  },
+  "plugins": {
+    "globalShortcut": {
+      "desktop": true
     }
   },
   "bundle": {
