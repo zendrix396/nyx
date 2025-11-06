@@ -198,8 +198,9 @@ impl Orchestrator {
         let now = Instant::now();
         let time_since_previous = self.last_event_time.map_or(Duration::ZERO, |last_time| now.duration_since(last_time));
 
+        // Extract only the event_type to avoid serialization issues with UnicodeInfo
         self.recording_buffer.push(TimedEvent {
-            event,
+            event_type: event.event_type,
             time_since_previous,
         });
 
