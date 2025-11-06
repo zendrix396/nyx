@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -37,6 +37,12 @@ pub fn run() {
       
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while running tauri application")
+    .run(|_app_handle, event| {
+      // Prevent app from exiting when window is closed
+      if let RunEvent::ExitRequested { api, .. } = event {
+        api.prevent_exit();
+      }
+    });
 }
