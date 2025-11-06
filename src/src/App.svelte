@@ -1,8 +1,10 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
 
   let goal = '';
+  let testStatus = '';
   const appWindow = getCurrentWindow();
 
   // Submitting the goal
@@ -18,6 +20,55 @@
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();
+    }
+  }
+
+  // I/O Controller Test Functions
+  async function testIO() {
+    try {
+      testStatus = 'Testing I/O controller...';
+      await invoke('test_io');
+      testStatus = '✓ Test complete! Mouse moved to (100, 100) and typed "hello"';
+      setTimeout(() => testStatus = '', 3000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Test failed:', error);
+    }
+  }
+
+  async function testMouseMove() {
+    try {
+      testStatus = 'Moving mouse to (500, 500)...';
+      await invoke('execute_mouse_move', { x: 500, y: 500 });
+      testStatus = '✓ Mouse moved successfully';
+      setTimeout(() => testStatus = '', 2000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Mouse move failed:', error);
+    }
+  }
+
+  async function testMouseClick() {
+    try {
+      testStatus = 'Clicking mouse...';
+      await invoke('execute_mouse_click', { buttonStr: 'left' });
+      testStatus = '✓ Mouse clicked successfully';
+      setTimeout(() => testStatus = '', 2000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Mouse click failed:', error);
+    }
+  }
+
+  async function testTypeString() {
+    try {
+      testStatus = 'Typing "Hello from Nyx!"...';
+      await invoke('execute_type_string', { text: 'Hello from Nyx!' });
+      testStatus = '✓ Text typed successfully';
+      setTimeout(() => testStatus = '', 2000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Type string failed:', error);
     }
   }
 
@@ -87,6 +138,28 @@
       >
         Execute
       </button>
+
+      <!-- I/O Controller Test Section -->
+      <div class="test-section">
+        <h3 class="test-title">I/O Controller Tests</h3>
+        {#if testStatus}
+          <div class="test-status">{testStatus}</div>
+        {/if}
+        <div class="test-buttons">
+          <button class="test-btn" on:click={testIO} on:dblclick|stopPropagation>
+            Test I/O (Full)
+          </button>
+          <button class="test-btn" on:click={testMouseMove} on:dblclick|stopPropagation>
+            Move Mouse
+          </button>
+          <button class="test-btn" on:click={testMouseClick} on:dblclick|stopPropagation>
+            Click Mouse
+          </button>
+          <button class="test-btn" on:click={testTypeString} on:dblclick|stopPropagation>
+            Type Text
+          </button>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -214,5 +287,52 @@
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+  }
+
+  .test-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .test-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0 0 12px 0;
+  }
+
+  .test-status {
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: rgba(57, 255, 20, 0.1);
+    border: 1px solid rgba(57, 255, 20, 0.3);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--neon-green);
+  }
+
+  .test-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .test-btn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .test-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
   }
 </style>

@@ -5,6 +5,9 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+pub mod modules;
+use modules::io_controller;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -21,6 +24,14 @@ pub fn run() {
                 })
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![
+            io_controller::execute_mouse_move,
+            io_controller::execute_mouse_click,
+            io_controller::execute_key_press,
+            io_controller::execute_key_release,
+            io_controller::execute_type_string,
+            io_controller::test_io
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
