@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::{mpsc, Arc}, thread};
 use tokio::sync::Mutex;
 use crate::orchestrator::{Orchestrator, TaskResult};
 
@@ -39,7 +39,9 @@ pub fn run() {
             io_controller::test_io,
             // Orchestrator Commands
             commands::execute_task_command,
-            commands::get_app_state_command
+            commands::get_app_state_command,
+            commands::start_recording_command,
+            commands::stop_recording_command
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -52,7 +54,24 @@ pub fn run() {
 
             // Setup the orchestrator and add it to the managed state
             let orchestrator = Orchestrator::new(app.handle().clone());
-            app.manage(Arc::new(Mutex::new(orchestrator)));
+            let orchestrator_state = Arc::new(Mutex::new(orchestrator));
+            app.manage(orchestrator_state.clone());
+
+            // Create a channel to send events from the listener to the processor
+            let (tx, rx) = mpsc::channel::<rdev::Event>();
+
+            // Spawn the event listener thread
+            thread::spawn(move || {
+                if let Err(error) = rdev::listen(move |event| {
+                    if tx.send(event).is_err() {
+                        log::error!("Failed to send event, receiver has likely been dropped.");
+                    }
+                }) {
+                    log::error!("Could not listen for events: {:?}", error);
+                }
+            });
+
+            tauri::async_runtime::spawn(orchestrator::event_processor_task(orchestrator_state.clone(), rx));
 
             app.global_shortcut()
                 .register(Shortcut::new(None, Code::F4))?;
@@ -160,5 +179,22 @@ mod commands {
     pub async fn get_app_state_command(orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>) -> Result<String, String> {
         let orchestrator = orchestrator_state.lock().await;
         Ok(serde_json::to_string(&orchestrator.state).unwrap_or_default())
+    }
+
+    #[tauri::command]
+    pub async fn start_recording_command(
+        orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>,
+    ) -> Result<(), String> {
+        let mut orchestrator = orchestrator_state.lock().await;
+        orchestrator.start_recording().map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub async fn stop_recording_command(
+        name: String,
+        orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>,
+    ) -> Result<(), String> {
+        let mut orchestrator = orchestrator_state.lock().await;
+        orchestrator.stop_recording(name).map_err(|e| e.to_string())
     }
 }

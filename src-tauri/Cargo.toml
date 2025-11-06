@@ -25,7 +25,8 @@ tauri = { version = "2.9.2", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2.0.0-beta.5"
 image = "0.24"
-rdev = "0.5.3"
+rdev = { version = "0.5.3", features = ["serialize"] }
 lazy_static = "1.4.0"
 tokio = { version = "1", features = ["full"] }
 thiserror = "1.0"
+serde_with = "3.4.0"

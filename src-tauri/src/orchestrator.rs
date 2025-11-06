@@ -1,9 +1,11 @@
 // src-tauri/src/orchestrator.rs
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use thiserror::Error;
-use std::sync::Arc;
+use std::{sync::{mpsc::Receiver, Arc}, time::{Duration, Instant}, fs};
 use tokio::sync::Mutex;
+
+use crate::modules::macro_engine::{Macro, TimedEvent};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -30,6 +32,9 @@ pub enum OrchestratorError {
 
     #[error("Tooling module failed: {0}")]
     ToolingError(String),
+
+    #[error("File system error: {0}")]
+    FileSystemError(String),
     
     #[error("Tauri event emission failed: {0}")]
     EventError(#[from] tauri::Error),
@@ -51,6 +56,8 @@ pub struct Orchestrator {
     cognition: Arc<Mutex<Cognition>>,
     tooling: Arc<Mutex<Tooling>>,
     knowledge: Arc<Mutex<Knowledge>>,
+    recording_buffer: Vec<TimedEvent>,
+    last_event_time: Option<Instant>,
 }
 
 impl Orchestrator {
@@ -63,6 +70,8 @@ impl Orchestrator {
             cognition: Arc::new(Mutex::new(Cognition)),
             tooling: Arc::new(Mutex::new(Tooling)),
             knowledge: Arc::new(Mutex::new(Knowledge)),
+            recording_buffer: Vec::new(),
+            last_event_time: None,
         }
     }
 
@@ -90,7 +99,47 @@ impl Orchestrator {
                 to: AppState::RECORDING,
             });
         }
+        log::info!("Starting macro recording...");
+        self.recording_buffer.clear();
+        self.last_event_time = None; // Reset timer for the new recording
         self.set_state(AppState::RECORDING)
+    }
+
+    pub fn stop_recording(&mut self, name: String) -> Result<(), OrchestratorError> {
+        if self.state != AppState::RECORDING {
+            return Err(OrchestratorError::InvalidStateTransition {
+                from: self.state.clone(),
+                to: AppState::IDLE,
+            });
+        }
+    
+        log::info!("Stopping recording for macro: {}", name);
+        log::info!("Recorded {} events", self.recording_buffer.len());
+    
+        let macro_data = Macro {
+            name: name.clone(),
+            events: self.recording_buffer.clone(),
+        };
+    
+        let json_string = serde_json::to_string_pretty(&macro_data)
+            .map_err(|e| OrchestratorError::FileSystemError(format!("Serialization failed: {}", e)))?;
+    
+        let config_dir = self.app_handle.path().app_config_dir()
+            .map_err(|e| OrchestratorError::FileSystemError(format!("Failed to get config dir: {}", e)))?;
+        let macros_dir = config_dir.join("nyx-agent/macros");
+        
+        log::info!("Saving macro to: {:?}", macros_dir);
+        
+        fs::create_dir_all(&macros_dir)
+            .map_err(|e| OrchestratorError::FileSystemError(format!("Failed to create macros dir: {}", e)))?;
+    
+        let file_path = macros_dir.join(format!("{}.json", name));
+        fs::write(&file_path, json_string)
+            .map_err(|e| OrchestratorError::FileSystemError(format!("Failed to write macro file: {}", e)))?;
+    
+        log::info!("Macro saved successfully to: {:?}", file_path);
+    
+        self.stop()
     }
     
     pub fn start_executing(&mut self, task: String) -> Result<(), OrchestratorError> {
@@ -138,6 +187,28 @@ impl Orchestrator {
             success: true,
             message: "Task completed successfully!".to_string(),
         })
+    }
+
+    // This function will be called by the event processor task
+    pub fn handle_event(&mut self, event: rdev::Event) {
+        if self.state != AppState::RECORDING {
+            return;
+        }
+
+        let now = Instant::now();
+        let time_since_previous = self.last_event_time.map_or(Duration::ZERO, |last_time| now.duration_since(last_time));
+
+        self.recording_buffer.push(TimedEvent {
+            event,
+            time_since_previous,
+        });
+
+        self.last_event_time = Some(now);
+        
+        // Log every 100th event to avoid spam
+        if self.recording_buffer.len() % 100 == 0 {
+            log::info!("Recorded {} events so far...", self.recording_buffer.len());
+        }
     }
 }
 
@@ -216,6 +287,16 @@ mod tests {
         let task_result = result.unwrap();
         assert!(task_result.success);
         assert_eq!(orchestrator.state, AppState::IDLE);
+    }
+}
+
+pub async fn event_processor_task(
+    orchestrator_state: Arc<Mutex<Orchestrator>>,
+    receiver: Receiver<rdev::Event>,
+) {
+    for event in receiver {
+        let mut orchestrator = orchestrator_state.lock().await;
+        orchestrator.handle_event(event);
     }
 }
 
