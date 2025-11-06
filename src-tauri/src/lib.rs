@@ -41,7 +41,10 @@ pub fn run() {
             commands::execute_task_command,
             commands::get_app_state_command,
             commands::start_recording_command,
-            commands::stop_recording_command
+            commands::stop_recording_command,
+            // New Macro Commands
+            commands::play_macro_command,
+            commands::list_macros_command
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -164,6 +167,7 @@ fn toggle_window_visibility(window: &tauri::WebviewWindow) {
 
 mod commands {
     use super::*;
+    use crate::modules::macro_engine;
     use tauri::State;
 
     #[tauri::command]
@@ -196,5 +200,45 @@ mod commands {
     ) -> Result<(), String> {
         let mut orchestrator = orchestrator_state.lock().await;
         orchestrator.stop_recording(name).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub async fn play_macro_command(
+        name: String,
+        app_handle: tauri::AppHandle,
+        orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>,
+    ) -> Result<(), String> {
+        // Set state to EXECUTING
+        {
+            let mut orchestrator = orchestrator_state.lock().await;
+            if orchestrator.state != orchestrator::AppState::IDLE {
+                return Err("Cannot play macro while the agent is not idle.".to_string());
+            }
+            orchestrator
+                .start_executing(format!("Playing macro: {}", name))
+                .map_err(|e| e.to_string())?;
+        }
+
+        // Load the macro
+        let macro_data =
+            macro_engine::load_macro(&name, &app_handle).map_err(|e| e.to_string())?;
+
+        // Play the macro in a blocking thread to not freeze the UI
+        let play_result = tokio::task::spawn_blocking(move || macro_engine::play_macro(&macro_data))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))?;
+
+        // Set state back to IDLE
+        {
+            let mut orchestrator = orchestrator_state.lock().await;
+            orchestrator.stop().map_err(|e| e.to_string())?;
+        }
+
+        play_result.map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn list_macros_command(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+        macro_engine::list_macros(&app_handle).map_err(|e| e.to_string())
     }
 }

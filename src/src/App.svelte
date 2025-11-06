@@ -10,6 +10,9 @@
   let taskProgress = '';
   const appWindow = getCurrentWindow();
 
+  let macros: string[] = [];
+  let playbackStatus = '';
+
   // Submitting the goal
   async function handleSubmit() {
     if (!goal.trim()) return;
@@ -121,10 +124,33 @@
       }
       await invoke('stop_recording_command', { name: name.trim() });
       testStatus = `✓ Macro "${name.trim()}" saved successfully`;
+      listMacros(); // Refresh the list immediately
       setTimeout(() => testStatus = '', 3000);
     } catch (error) {
       testStatus = `✗ Error stopping recording: ${error}`;
       console.error('Stop recording failed:', error);
+    }
+  }
+
+  // Macro Playback Functions
+  async function listMacros() {
+    try {
+      macros = await invoke<string[]>('list_macros_command');
+    } catch (error) {
+      playbackStatus = `✗ Error listing macros: ${error}`;
+      console.error('List macros failed:', error);
+    }
+  }
+
+  async function playMacro(name: string) {
+    try {
+      playbackStatus = `Playing macro "${name}"...`;
+      await invoke('play_macro_command', { name });
+      playbackStatus = `✓ Macro "${name}" finished.`;
+      setTimeout(() => playbackStatus = '', 3000);
+    } catch (error) {
+      playbackStatus = `✗ Error playing macro: ${error}`;
+      console.error('Play macro failed:', error);
     }
   }
 
@@ -184,6 +210,9 @@
       testStatus = taskProgress;
       console.log('Task progress:', taskProgress);
     });
+
+    // Load macros when the app starts
+    listMacros();
 
     return () => {
       clearInterval(intervalId);
@@ -295,7 +324,34 @@
                 Stop Recording
             </button>
         </div>
-    </div>
+      </div>
+
+      <!-- Macro Playback Section -->
+      <div class="test-section">
+        <h3 class="test-title">Macro Playback</h3>
+        {#if playbackStatus}
+          <div class="test-status">{playbackStatus}</div>
+        {/if}
+        <div class="macro-list">
+          {#if macros.length > 0}
+            {#each macros as macroName (macroName)}
+              <div class="macro-item">
+                <span>{macroName}</span>
+                <button 
+                  class="play-btn" 
+                  on:click={() => playMacro(macroName)}
+                  disabled={appState !== 'IDLE'}
+                  on:dblclick|stopPropagation
+                >
+                  Play
+                </button>
+              </div>
+            {/each}
+          {:else}
+            <div class="no-macros">No macros recorded yet.</div>
+          {/if}
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -498,5 +554,56 @@
   .status-value {
     color: var(--neon-green);
     font-weight: 600;
+  }
+
+  /* New Styles for Macro Playback */
+  .macro-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .macro-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+  }
+  
+  .macro-item span {
+    color: white;
+    font-size: 0.9rem;
+  }
+
+  .play-btn {
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: rgba(57, 255, 20, 0.2);
+    color: var(--neon-green);
+    border: 1px solid rgba(57, 255, 20, 0.4);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .play-btn:hover:not(:disabled) {
+    background: rgba(57, 255, 20, 0.3);
+  }
+  
+  .play-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .no-macros {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    padding: 16px;
   }
 </style>
