@@ -1,18 +1,30 @@
 <script lang="ts">
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { onMount, onDestroy } from 'svelte';
 
   let goal = '';
   let testStatus = '';
+  let appState = 'IDLE';
+  let taskProgress = '';
   const appWindow = getCurrentWindow();
 
   // Submitting the goal
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!goal.trim()) return;
-    console.log('Goal submitted:', goal);
-    // TODO: Send goal to orchestrator
+    const taskDescription = goal.trim();
     goal = '';
+    testStatus = 'Executing task...';
+    
+    try {
+      const result = await invoke('execute_task_command', { task: taskDescription });
+      testStatus = `✓ Task completed: ${result.message}`;
+      setTimeout(() => testStatus = '', 5000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Task execution failed:', error);
+    }
   }
 
   // Handle Enter key for submission
@@ -72,6 +84,34 @@
     }
   }
 
+  // Orchestrator Test Functions
+  async function testExecuteTask() {
+    try {
+      testStatus = 'Executing test task...';
+      const result = await invoke('execute_task_command', { 
+        task: 'Test task: Move mouse and type hello' 
+      });
+      testStatus = `✓ Task completed: ${result.message}`;
+      setTimeout(() => testStatus = '', 5000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Execute task failed:', error);
+    }
+  }
+
+  async function testGetAppState() {
+    try {
+      testStatus = 'Getting app state...';
+      const state = await invoke('get_app_state_command');
+      appState = JSON.parse(state);
+      testStatus = `✓ Current state: ${appState}`;
+      setTimeout(() => testStatus = '', 3000);
+    } catch (error) {
+      testStatus = `✗ Error: ${error}`;
+      console.error('Get app state failed:', error);
+    }
+  }
+
   onMount(() => {
     // Set always on top by default (like Krona-Lite)
     appWindow.setAlwaysOnTop(true).catch((error) => {
@@ -104,8 +144,22 @@
     // Check very frequently to catch hides immediately
     const intervalId = setInterval(preventUnexpectedHide, 50);
 
+    // Listen to orchestrator events
+    const unlistenStateChanged = listen('app_state_changed', (event: any) => {
+      appState = event.payload;
+      console.log('App state changed:', appState);
+    });
+
+    const unlistenTaskProgress = listen('task_progress', (event: any) => {
+      taskProgress = event.payload;
+      testStatus = taskProgress;
+      console.log('Task progress:', taskProgress);
+    });
+
     return () => {
       clearInterval(intervalId);
+      unlistenStateChanged.then(fn => fn());
+      unlistenTaskProgress.then(fn => fn());
     };
   });
 </script>
@@ -139,6 +193,22 @@
         Execute
       </button>
 
+      <!-- Status Display -->
+      {#if taskProgress || appState !== 'IDLE'}
+        <div class="status-section">
+          <div class="status-item">
+            <span class="status-label">State:</span>
+            <span class="status-value">{appState}</span>
+          </div>
+          {#if taskProgress}
+            <div class="status-item">
+              <span class="status-label">Progress:</span>
+              <span class="status-value">{taskProgress}</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <!-- I/O Controller Test Section -->
       <div class="test-section">
         <h3 class="test-title">I/O Controller Tests</h3>
@@ -157,6 +227,19 @@
           </button>
           <button class="test-btn" on:click={testTypeString} on:dblclick|stopPropagation>
             Type Text
+          </button>
+        </div>
+      </div>
+
+      <!-- Orchestrator Test Section -->
+      <div class="test-section">
+        <h3 class="test-title">Orchestrator Tests</h3>
+        <div class="test-buttons">
+          <button class="test-btn" on:click={testExecuteTask} on:dblclick|stopPropagation>
+            Execute Task
+          </button>
+          <button class="test-btn" on:click={testGetAppState} on:dblclick|stopPropagation>
+            Get State
           </button>
         </div>
       </div>
@@ -334,5 +417,33 @@
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
     transform: translateY(-1px);
+  }
+
+  .status-section {
+    margin-top: 20px;
+    padding: 12px;
+    background: rgba(57, 255, 20, 0.05);
+    border: 1px solid rgba(57, 255, 20, 0.2);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+
+  .status-label {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+  }
+
+  .status-value {
+    color: var(--neon-green);
+    font-weight: 600;
   }
 </style>

@@ -1,3 +1,7 @@
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use crate::orchestrator::{Orchestrator, TaskResult};
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -6,6 +10,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub mod modules;
+pub mod orchestrator;
 use modules::io_controller;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,12 +30,16 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            // IO Controller Commands
             io_controller::execute_mouse_move,
             io_controller::execute_mouse_click,
             io_controller::execute_key_press,
             io_controller::execute_key_release,
             io_controller::execute_type_string,
-            io_controller::test_io
+            io_controller::test_io,
+            // Orchestrator Commands
+            commands::execute_task_command,
+            commands::get_app_state_command
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -40,6 +49,10 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Setup the orchestrator and add it to the managed state
+            let orchestrator = Orchestrator::new(app.handle().clone());
+            app.manage(Arc::new(Mutex::new(orchestrator)));
 
             app.global_shortcut()
                 .register(Shortcut::new(None, Code::F4))?;
@@ -127,5 +140,25 @@ fn toggle_window_visibility(window: &tauri::WebviewWindow) {
     } else {
         let _ = window.show();
         let _ = window.set_focus();
+    }
+}
+
+mod commands {
+    use super::*;
+    use tauri::State;
+
+    #[tauri::command]
+    pub async fn execute_task_command(
+        task: String,
+        orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>,
+    ) -> Result<TaskResult, String> {
+        let mut orchestrator = orchestrator_state.lock().await;
+        orchestrator.execute_task(task).await.map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub async fn get_app_state_command(orchestrator_state: State<'_, Arc<Mutex<Orchestrator>>>) -> Result<String, String> {
+        let orchestrator = orchestrator_state.lock().await;
+        Ok(serde_json::to_string(&orchestrator.state).unwrap_or_default())
     }
 }
