@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.tauri.dev",
   "build": {
-    "frontendDist": "../src/build",
+    "frontendDist": "../src/dist",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:5173"
@@ -13,10 +13,17 @@
     "windows": [
       {
         "title": "Nyx",
-        "width": 800,
-        "height": 600,
+        "width": 350,
+        "height": 310,
+        "minWidth": 120,
+        "minHeight": 80,
+        "maxHeight": 600,
+        "decorations": false,
+        "transparent": true,
         "resizable": true,
-        "fullscreen": false
+        "skipTaskbar": true,
+        "visible": false,
+        "focusable": true
       }
     ],
     "security": {
@@ -32,6 +39,16 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "globalShortcut": {
+      "desktop": true
+    }
   }
 }
