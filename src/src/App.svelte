@@ -18,7 +18,7 @@
     testStatus = 'Executing task...';
     
     try {
-      const result = await invoke('execute_task_command', { task: taskDescription });
+      const result = await invoke<{ success: boolean; message: string }>('execute_task_command', { task: taskDescription });
       testStatus = `✓ Task completed: ${result.message}`;
       setTimeout(() => testStatus = '', 5000);
     } catch (error) {
@@ -88,7 +88,7 @@
   async function testExecuteTask() {
     try {
       testStatus = 'Executing test task...';
-      const result = await invoke('execute_task_command', { 
+      const result = await invoke<{ success: boolean; message: string }>('execute_task_command', { 
         task: 'Test task: Move mouse and type hello' 
       });
       testStatus = `✓ Task completed: ${result.message}`;
@@ -99,11 +99,40 @@
     }
   }
 
+  // Macro Recorder Functions
+  async function startRecording() {
+    try {
+      await invoke('start_recording_command');
+      testStatus = '✓ Recording started';
+      setTimeout(() => testStatus = '', 2000);
+    } catch (error) {
+      testStatus = `✗ Error starting recording: ${error}`;
+      console.error('Start recording failed:', error);
+    }
+  }
+
+  async function stopRecording() {
+    try {
+      const name = prompt('Enter a name for the macro:');
+      if (!name || !name.trim()) {
+        testStatus = '✗ Macro name is required';
+        setTimeout(() => testStatus = '', 2000);
+        return;
+      }
+      await invoke('stop_recording_command', { name: name.trim() });
+      testStatus = `✓ Macro "${name.trim()}" saved successfully`;
+      setTimeout(() => testStatus = '', 3000);
+    } catch (error) {
+      testStatus = `✗ Error stopping recording: ${error}`;
+      console.error('Stop recording failed:', error);
+    }
+  }
+
   async function testGetAppState() {
     try {
       testStatus = 'Getting app state...';
-      const state = await invoke('get_app_state_command');
-      appState = JSON.parse(state);
+      const state = await invoke<string>('get_app_state_command');
+      appState = JSON.parse(state) as string;
       testStatus = `✓ Current state: ${appState}`;
       setTimeout(() => testStatus = '', 3000);
     } catch (error) {
@@ -243,6 +272,30 @@
           </button>
         </div>
       </div>
+
+      <!-- Macro Recorder Section -->
+      <div class="test-section">
+        <h3 class="test-title">Macro Recorder</h3>
+        {#if testStatus && (testStatus.includes('Recording') || testStatus.includes('Macro'))}
+          <div class="test-status">{testStatus}</div>
+        {/if}
+        <div class="test-buttons">
+            <button 
+                class="test-btn" 
+                on:click={startRecording}
+                disabled={appState === 'RECORDING'}
+                on:dblclick|stopPropagation>
+                Start Recording
+            </button>
+            <button 
+                class="test-btn" 
+                on:click={stopRecording}
+                disabled={appState !== 'RECORDING'}
+                on:dblclick|stopPropagation>
+                Stop Recording
+            </button>
+        </div>
+    </div>
     </div>
   </main>
 </div>
