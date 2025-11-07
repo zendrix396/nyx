@@ -44,7 +44,10 @@ pub fn run() {
             commands::stop_recording_command,
             // New Macro Commands
             commands::play_macro_command,
-            commands::list_macros_command
+            commands::list_macros_command,
+            // Gemini API Commands
+            commands::set_gemini_api_key,
+            commands::test_gemini_api
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -78,6 +81,21 @@ pub fn run() {
 
             app.global_shortcut()
                 .register(Shortcut::new(None, Code::F4))?;
+
+            // Set up window event listeners to prevent hiding on blur
+            if let Some(window) = app.get_webview_window("main") {
+                // Set always on top
+                let _ = window.set_always_on_top(true);
+                
+                // Listen for window blur events and prevent hiding
+                let window_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { .. } = event {
+                        // Prevent closing, just hide instead
+                        let _ = window_clone.hide();
+                    }
+                });
+            }
 
             // Create menu items
             let toggle_i = MenuItem::with_id(app, "toggle", "Show/Hide Agent", true, None::<&str>)?;
@@ -168,6 +186,7 @@ fn toggle_window_visibility(window: &tauri::WebviewWindow) {
 mod commands {
     use super::*;
     use crate::modules::macro_engine;
+    use crate::modules::cognition;
     use tauri::State;
 
     #[tauri::command]
@@ -240,5 +259,16 @@ mod commands {
     #[tauri::command]
     pub fn list_macros_command(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
         macro_engine::list_macros(&app_handle).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn set_gemini_api_key(api_key: String) -> Result<(), String> {
+        cognition::set_api_key(&api_key).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub async fn test_gemini_api(prompt: Option<String>) -> Result<String, String> {
+        let test_prompt = prompt.unwrap_or_else(|| "Say hello in a friendly way!".to_string());
+        cognition::ask_gemini(&test_prompt).await.map_err(|e| e.to_string())
     }
 }

@@ -12,6 +12,11 @@
 
   let macros: string[] = [];
   let playbackStatus = '';
+  
+  // Gemini API Key Management
+  let apiKey = '';
+  let apiKeyStatus = '';
+  let geminiResponse = '';
 
   // Submitting the goal
   async function handleSubmit() {
@@ -167,37 +172,47 @@
     }
   }
 
+  // Gemini API Key Functions
+  async function saveApiKey() {
+    if (!apiKey.trim()) {
+      apiKeyStatus = '✗ Please enter an API key';
+      setTimeout(() => apiKeyStatus = '', 3000);
+      return;
+    }
+    
+    try {
+      apiKeyStatus = 'Saving API key...';
+      await invoke('set_gemini_api_key', { apiKey: apiKey.trim() });
+      apiKeyStatus = '✓ API key saved successfully!';
+      apiKey = ''; // Clear the input for security
+      setTimeout(() => apiKeyStatus = '', 3000);
+    } catch (error) {
+      apiKeyStatus = `✗ Error: ${error}`;
+      console.error('Failed to save API key:', error);
+    }
+  }
+
+  async function testGeminiApi() {
+    try {
+      geminiResponse = '';
+      apiKeyStatus = 'Testing Gemini API...';
+      const response = await invoke<string>('test_gemini_api', { prompt: null });
+      geminiResponse = response;
+      apiKeyStatus = '✓ API test successful!';
+      setTimeout(() => apiKeyStatus = '', 5000);
+    } catch (error) {
+      apiKeyStatus = `✗ Error: ${error}`;
+      geminiResponse = '';
+      console.error('Gemini API test failed:', error);
+    }
+  }
+
   onMount(() => {
-    // Set always on top by default (like Krona-Lite)
+    // Window is already set to alwaysOnTop in tauri.conf.json and Rust setup
+    // This ensures it stays on top and doesn't hide when clicking elsewhere
     appWindow.setAlwaysOnTop(true).catch((error) => {
       console.error("Failed to set always-on-top:", error);
     });
-
-    // CRITICAL: Prevent window from hiding on blur/unfocus  
-    // Only F4 should hide the window (handled by Rust backend)
-    // Strategy: Immediately re-show if hidden, but F4 will hide it again instantly
-    // This creates a brief flash but keeps window visible for non-F4 hides
-    let wasVisible = true;
-    
-    const preventUnexpectedHide = async () => {
-      try {
-        const isVisible = await appWindow.isVisible();
-        
-        // If window was visible and now it's hidden, show it immediately
-        // F4 will hide it again immediately after, so it stays hidden
-        // Other hides (blur, click outside) will be undone
-        if (wasVisible && !isVisible) {
-          await appWindow.show();
-        }
-        
-        wasVisible = isVisible;
-      } catch (error) {
-        // Ignore errors
-      }
-    };
-
-    // Check very frequently to catch hides immediately
-    const intervalId = setInterval(preventUnexpectedHide, 50);
 
     // Listen to orchestrator events
     const unlistenStateChanged = listen('app_state_changed', (event: any) => {
@@ -215,7 +230,6 @@
     listMacros();
 
     return () => {
-      clearInterval(intervalId);
       unlistenStateChanged.then(fn => fn());
       unlistenTaskProgress.then(fn => fn());
     };
@@ -266,6 +280,47 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Gemini API Key Section -->
+      <div class="test-section">
+        <h3 class="test-title">Gemini API Configuration</h3>
+        {#if apiKeyStatus}
+          <div class="test-status">{apiKeyStatus}</div>
+        {/if}
+        <div class="api-key-section">
+          <input
+            type="password"
+            bind:value={apiKey}
+            placeholder="Enter your Gemini API key"
+            class="api-key-input"
+            on:keydown={(e) => e.key === 'Enter' && saveApiKey()}
+            on:dblclick|stopPropagation
+          />
+          <div class="api-key-buttons">
+            <button 
+              class="test-btn" 
+              on:click={saveApiKey}
+              disabled={!apiKey.trim()}
+              on:dblclick|stopPropagation
+            >
+              Save API Key
+            </button>
+            <button 
+              class="test-btn" 
+              on:click={testGeminiApi}
+              on:dblclick|stopPropagation
+            >
+              Test API
+            </button>
+          </div>
+          {#if geminiResponse}
+            <div class="gemini-response">
+              <strong>Gemini Response:</strong>
+              <p>{geminiResponse}</p>
+            </div>
+          {/if}
+        </div>
+      </div>
 
       <!-- I/O Controller Test Section -->
       <div class="test-section">
@@ -526,6 +581,69 @@
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
     transform: translateY(-1px);
+  }
+
+  .test-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .api-key-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .api-key-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    font-family: var(--font-mono, monospace);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: white;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .api-key-input:focus {
+    border-color: var(--neon-green);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .api-key-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .api-key-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .gemini-response {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(57, 255, 20, 0.05);
+    border: 1px solid rgba(57, 255, 20, 0.2);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .gemini-response strong {
+    color: var(--neon-green);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .gemini-response p {
+    margin: 0;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
 
   .status-section {

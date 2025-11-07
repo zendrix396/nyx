@@ -91,52 +91,63 @@ fn parse_button(s: &str) -> Button {
 }
 
 fn parse_key(s: &str) -> Key {
-    // Parse the key string back to Key enum
-    // This is a simplified parser - you may need to expand this
     match s {
-        "KeyA" => Key::KeyA,
-        "KeyB" => Key::KeyB,
-        "KeyC" => Key::KeyC,
-        "KeyD" => Key::KeyD,
-        "KeyE" => Key::KeyE,
-        "KeyF" => Key::KeyF,
-        "KeyG" => Key::KeyG,
-        "KeyH" => Key::KeyH,
-        "KeyI" => Key::KeyI,
-        "KeyJ" => Key::KeyJ,
-        "KeyK" => Key::KeyK,
-        "KeyL" => Key::KeyL,
-        "KeyM" => Key::KeyM,
-        "KeyN" => Key::KeyN,
-        "KeyO" => Key::KeyO,
-        "KeyP" => Key::KeyP,
-        "KeyQ" => Key::KeyQ,
-        "KeyR" => Key::KeyR,
-        "KeyS" => Key::KeyS,
-        "KeyT" => Key::KeyT,
-        "KeyU" => Key::KeyU,
-        "KeyV" => Key::KeyV,
-        "KeyW" => Key::KeyW,
-        "KeyX" => Key::KeyX,
-        "KeyY" => Key::KeyY,
-        "KeyZ" => Key::KeyZ,
-        "Space" => Key::Space,
+        // Alphanumeric
+        "KeyA" => Key::KeyA, "KeyB" => Key::KeyB, "KeyC" => Key::KeyC, "KeyD" => Key::KeyD,
+        "KeyE" => Key::KeyE, "KeyF" => Key::KeyF, "KeyG" => Key::KeyG, "KeyH" => Key::KeyH,
+        "KeyI" => Key::KeyI, "KeyJ" => Key::KeyJ, "KeyK" => Key::KeyK, "KeyL" => Key::KeyL,
+        "KeyM" => Key::KeyM, "KeyN" => Key::KeyN, "KeyO" => Key::KeyO, "KeyP" => Key::KeyP,
+        "KeyQ" => Key::KeyQ, "KeyR" => Key::KeyR, "KeyS" => Key::KeyS, "KeyT" => Key::KeyT,
+        "KeyU" => Key::KeyU, "KeyV" => Key::KeyV, "KeyW" => Key::KeyW, "KeyX" => Key::KeyX,
+        "KeyY" => Key::KeyY, "KeyZ" => Key::KeyZ,
+        "Num1" => Key::Num1, "Num2" => Key::Num2, "Num3" => Key::Num3, "Num4" => Key::Num4,
+        "Num5" => Key::Num5, "Num6" => Key::Num6, "Num7" => Key::Num7, "Num8" => Key::Num8,
+        "Num9" => Key::Num9, "Num0" => Key::Num0,
+
+        // Special Keys
+        "Return" => Key::Return, // <-- FIX for Enter key
+        "Enter" => Key::Return,  // Alias for Enter
         "Escape" => Key::Escape,
         "Backspace" => Key::Backspace,
         "Tab" => Key::Tab,
+        "Space" => Key::Space,
+        "Delete" => Key::Delete,
+
+        // Modifier Keys
         "ShiftLeft" => Key::ShiftLeft,
         "ShiftRight" => Key::ShiftRight,
         "ControlLeft" => Key::ControlLeft,
         "ControlRight" => Key::ControlRight,
-        "MetaLeft" => Key::MetaLeft,
-        "MetaRight" => Key::MetaRight,
+        "Alt" => Key::Alt,
+        "AltGr" => Key::AltGr,
+        "MetaLeft" => Key::MetaLeft,   // <-- FIX for Windows key
+        "MetaRight" => Key::MetaRight, // <-- FIX for Windows key
+
+        // Arrow Keys
+        "UpArrow" => Key::UpArrow,
+        "DownArrow" => Key::DownArrow,
+        "LeftArrow" => Key::LeftArrow,
+        "RightArrow" => Key::RightArrow,
+
+        // Function Keys
+        "F1" => Key::F1, "F2" => Key::F2, "F3" => Key::F3, "F4" => Key::F4,
+        "F5" => Key::F5, "F6" => Key::F6, "F7" => Key::F7, "F8" => Key::F8,
+        "F9" => Key::F9, "F10" => Key::F10, "F11" => Key::F11, "F12" => Key::F12,
+
+        // Navigation
+        "Home" => Key::Home,
+        "End" => Key::End,
+        "PageUp" => Key::PageUp,
+        "PageDown" => Key::PageDown,
+        
+        // Default case
         _ => {
-            // Try to parse as Unknown(u32)
             if let Some(num_str) = s.strip_prefix("Unknown(").and_then(|s| s.strip_suffix(")")) {
                 if let Ok(num) = num_str.parse::<u32>() {
                     return Key::Unknown(num);
                 }
             }
+            log::warn!("Unhandled key in macro playback: {}. Defaulting to Unknown(0).", s);
             Key::Unknown(0)
         }
     }
@@ -199,19 +210,32 @@ pub fn load_macro(name: &str, app_handle: &tauri::AppHandle) -> Result<Macro, Ma
 
 /// Executes the events in a given Macro struct.
 pub fn play_macro(macro_data: &Macro) -> Result<(), MacroError> {
-    log::info!("Playing macro: {}", macro_data.name);
-    for timed_event in &macro_data.events {
-        // Wait for the specified duration
-        thread::sleep(timed_event.time_since_previous);
+    log::info!("--- Starting macro playback: {} ---", macro_data.name);
+    log::info!("Total events to play: {}", macro_data.events.len());
+
+    for (index, timed_event) in macro_data.events.iter().enumerate() {
+        // Wait for the recorded duration
+        if !timed_event.time_since_previous.is_zero() {
+            log::info!("[Step {}/{}] Waiting for {:.4} seconds...",
+                index + 1,
+                macro_data.events.len(),
+                timed_event.time_since_previous.as_secs_f64()
+            );
+            thread::sleep(timed_event.time_since_previous);
+        }
 
         // Execute the event
+        log::info!("[Step {}/{}] Executing: {:?}",
+            index + 1,
+            macro_data.events.len(),
+            timed_event.event_type
+        );
         if let Err(e) = io_controller::send_event(&timed_event.event_type) {
             let error_msg = format!("Failed to send event during macro playback: {}", e);
             log::error!("{}", error_msg);
-            // We can choose to abort or continue on error. For now, we'll log and continue.
         }
     }
-    log::info!("Finished playing macro: {}", macro_data.name);
+    log::info!("--- Finished playing macro: {} ---", macro_data.name);
     Ok(())
 }
 
