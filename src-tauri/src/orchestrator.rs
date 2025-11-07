@@ -4,6 +4,7 @@ use tauri::{Emitter, Manager};
 use thiserror::Error;
 use std::{sync::{mpsc::Receiver, Arc}, time::{Duration, Instant}, fs};
 use tokio::sync::Mutex;
+use rdev::Key;
 
 use crate::modules::macro_engine::{Macro, TimedEvent};
 
@@ -58,6 +59,7 @@ pub struct Orchestrator {
     knowledge: Arc<Mutex<Knowledge>>,
     recording_buffer: Vec<TimedEvent>,
     last_event_time: Option<Instant>,
+    last_recorded_event_type: Option<rdev::EventType>,
 }
 
 impl Orchestrator {
@@ -72,6 +74,7 @@ impl Orchestrator {
             knowledge: Arc::new(Mutex::new(Knowledge)),
             recording_buffer: Vec::new(),
             last_event_time: None,
+            last_recorded_event_type: None,
         }
     }
 
@@ -102,6 +105,7 @@ impl Orchestrator {
         log::info!("Starting macro recording...");
         self.recording_buffer.clear();
         self.last_event_time = None; // Reset timer for the new recording
+        self.last_recorded_event_type = None; // Reset last recorded event type
         self.set_state(AppState::RECORDING)
     }
 
@@ -115,6 +119,41 @@ impl Orchestrator {
     
         log::info!("Stopping recording for macro: {}", name);
         log::info!("Recorded {} events", self.recording_buffer.len());
+    
+        // --- NEW: Heuristic to fix missed initial Win key press ---
+        if let Some(first_event) = self.recording_buffer.first() {
+            // Check if the macro starts with typing, not a modifier.
+            if let rdev::EventType::KeyPress(key) = first_event.event_type {
+                if !matches!(key, Key::ControlLeft | Key::ControlRight | Key::ShiftLeft | Key::ShiftRight | Key::Alt | Key::AltGr | Key::MetaLeft | Key::MetaRight) {
+                    
+                    // Now, find the first Win key press/release pair that happened *later*.
+                    let meta_press_pos = self.recording_buffer.iter().position(|ev| ev.event_type == rdev::EventType::KeyPress(Key::MetaLeft));
+                    let meta_release_pos = self.recording_buffer.iter().position(|ev| ev.event_type == rdev::EventType::KeyRelease(Key::MetaLeft));
+                    
+                    if let (Some(press_idx), Some(release_idx)) = (meta_press_pos, meta_release_pos) {
+                        if release_idx > press_idx {
+                            log::warn!("[Heuristic] Detected typing before a Win key press. Attempting to auto-correct macro.");
+
+                            // Remove the events from their incorrect position. Must remove from back to front.
+                            let release_event = self.recording_buffer.remove(release_idx);
+                            let press_event = self.recording_buffer.remove(press_idx);
+
+                            // Insert them correctly at the very beginning.
+                            self.recording_buffer.insert(0, release_event);
+                            self.recording_buffer.insert(0, press_event);
+                            
+                            // Adjust timings for reliable playback.
+                            self.recording_buffer[0].time_since_previous = Duration::ZERO; // Win press is instant.
+                            self.recording_buffer[1].time_since_previous = Duration::from_millis(80); // Hold Win for 80ms.
+                            self.recording_buffer[2].time_since_previous = Duration::from_millis(300); // Wait for Start Menu.
+
+                            log::info!("[Heuristic] Macro event order corrected successfully.");
+                        }
+                    }
+                }
+            }
+        }
+        // --- END of Heuristic ---
     
         let macro_data = Macro {
             name: name.clone(),
@@ -195,18 +234,28 @@ impl Orchestrator {
             return;
         }
 
-        let now = Instant::now();
-        let time_since_previous = self.last_event_time.map_or(Duration::ZERO, |last_time| now.duration_since(last_time));
+        // --- ONLY keep the key-repeat filter ---
+        if let Some(last_event) = &self.last_recorded_event_type {
+            if last_event == &event.event_type {
+                if matches!(event.event_type, rdev::EventType::KeyPress { .. }) {
+                    return;
+                }
+            }
+        }
 
-        // Extract only the event_type to avoid serialization issues with UnicodeInfo
+        let now = Instant::now();
+        let time_since_previous = self
+            .last_event_time
+            .map_or(Duration::ZERO, |last_time| now.duration_since(last_time));
+
         self.recording_buffer.push(TimedEvent {
-            event_type: event.event_type,
+            event_type: event.event_type.clone(),
             time_since_previous,
         });
 
+        self.last_recorded_event_type = Some(event.event_type.clone());
         self.last_event_time = Some(now);
-        
-        // Log every 100th event to avoid spam
+
         if self.recording_buffer.len() % 100 == 0 {
             log::info!("Recorded {} events so far...", self.recording_buffer.len());
         }

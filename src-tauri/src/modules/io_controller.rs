@@ -21,9 +21,6 @@ lazy_static! {
 pub fn send_event(event_type: &EventType) -> Result<(), String> {
     let _lock = EVENT_LOCK.lock().map_err(|e| format!("Failed to acquire event lock: {}", e))?;
     rdev::simulate(event_type).map_err(|e| format!("Failed to simulate event: {:?}", e))?;
-    // Add a small delay after each event to ensure the OS can process it.
-    // This is especially important for sequences of events like typing.
-    thread::sleep(time::Duration::from_millis(10));
     Ok(())
 }
 
